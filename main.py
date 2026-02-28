@@ -32,6 +32,15 @@ HTTP_TIMEOUT = 15.0
 app = FastAPI()
 
 
+@app.exception_handler(Exception)
+async def json_exception_handler(request, exc: Exception):
+    """Ensure API always returns JSON, never HTML, to avoid JSON.parse errors in frontend."""
+    return JSONResponse(
+        status_code=500,
+        content={"error": str(exc), "detail": "Internal server error"},
+    )
+
+
 # ----------------------------
 # Helpers
 # ----------------------------
@@ -427,64 +436,92 @@ OB = OrderbookWSManager()
 # ----------------------------
 INDEX_HTML = r"""
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Polymarket Holdings + Quotes</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Whale Tracker - Polymarket Wallet Holdings</title>
   <style>
-    :root{
-      --bg:#0b1020; --text:rgba(255,255,255,.92); --muted:rgba(255,255,255,.68);
-      --border:rgba(255,255,255,.12); --card:rgba(255,255,255,.06); --card2:rgba(255,255,255,.09);
-      --good:#41d18b; --bad:#ff6b6b; --warn:#ffd166;
-    }
-    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
-      background:radial-gradient(1200px 800px at 20% 10%, rgba(110,168,255,0.25), transparent 60%),
-               radial-gradient(1200px 800px at 90% 40%, rgba(65,209,139,0.18), transparent 60%),
-               var(--bg);color:var(--text);}
-    .wrap{max-width:1180px;margin:0 auto;padding:22px;}
-    h1{margin:0 0 6px 0;font-size:22px;}
-    .sub{color:var(--muted);margin-bottom:18px;}
-    .grid{display:grid;grid-template-columns:1.05fr 1.95fr;gap:14px;}
-    @media (max-width:980px){.grid{grid-template-columns:1fr;}}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;
-      box-shadow:0 10px 30px rgba(0,0,0,0.25);backdrop-filter: blur(10px);}
+    *{box-sizing:border-box;}
+    html,body{margin:0;padding:0;min-height:100vh;background:#f1f5f9;color:#1e293b;font-family:system-ui,sans-serif;font-size:15px;}
+    .wrap{max-width:1400px;margin:0 auto;padding:20px;}
+    h1{margin:0 0 8px 0;font-size:1.5rem;font-weight:700;color:#0f172a;}
+    .sub{color:#64748b;font-size:0.9rem;margin-bottom:20px;}
+    .grid{display:grid;gap:16px;}
+    @media(min-width:1024px){.grid{grid-template-columns:360px 1fr;}}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);}
+    .card-header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px;}
+    .card-title{font-weight:700;font-size:1rem;color:#0f172a;}
     .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
-    label{display:block;color:var(--muted);font-size:12px;margin-bottom:6px;}
-    textarea,input{width:100%;background:rgba(255,255,255,0.06);color:var(--text);border:1px solid var(--border);
-      border-radius:12px;padding:10px 10px;outline:none;}
-    textarea{min-height:90px;resize:vertical;}
-    .btn{background:linear-gradient(135deg, rgba(110,168,255,0.92), rgba(65,209,139,0.84));
-      color:#071022;border:0;border-radius:12px;padding:10px 12px;font-weight:900;cursor:pointer;}
-    .btn2{background:rgba(255,255,255,0.08);color:var(--text);border:1px solid var(--border);
-      border-radius:12px;padding:10px 12px;font-weight:800;cursor:pointer;}
-    .pill{padding:4px 10px;border-radius:999px;border:1px solid var(--border);color:var(--muted);font-size:12px;}
-    .statusDot{display:inline-block;width:10px;height:10px;border-radius:999px;background:var(--warn);
-      box-shadow:0 0 0 4px rgba(255,209,102,0.15);}
-    .ok{background:var(--good);box-shadow:0 0 0 4px rgba(65,209,139,0.15);}
-    .bad{background:var(--bad);box-shadow:0 0 0 4px rgba(255,107,107,0.12);}
-    .divider{height:1px;background:rgba(255,255,255,0.10);margin:12px 0;}
-    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono";}
-    .small{font-size:12px;} .muted{color:var(--muted);}
-    .holdGrid{display:grid;grid-template-columns:repeat(2, 1fr);gap:10px;margin-top:12px;}
-    .holdCard{background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:12px;}
-    .k{color:var(--muted);font-size:12px;}
-    .v{font-weight:900;font-size:18px;margin-top:4px;}
-    .kv{display:flex;justify-content:space-between;gap:10px;margin-top:6px;}
-    .kv .left{color:var(--muted);font-size:12px;}
-    .kv .right{font-weight:800;}
-    .bar{height:10px;border-radius:999px;border:1px solid rgba(255,255,255,0.12);
-      background:rgba(255,255,255,0.05);overflow:hidden;}
-    .fillUp{height:100%;background:rgba(65,209,139,0.90);}
-    .fillDown{height:100%;background:rgba(255,107,107,0.90);}
-    .errorBox{display:none;margin-top:10px;background:rgba(255,107,107,0.12);border:1px solid rgba(255,107,107,0.25);
-      border-radius:14px;padding:10px;}
+    label{display:block;color:#64748b;font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;}
+    textarea,input{width:100%;background:#f8fafc;color:#1e293b;border:1px solid #cbd5e1;border-radius:8px;padding:10px 12px;font-size:0.9rem;outline:none;}
+    textarea:focus,input:focus{border-color:#6366f1;box-shadow:0 0 0 2px rgba(99,102,241,0.2);}
+    textarea{min-height:80px;resize:vertical;}
+    .input-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    .btn{background:#6366f1;color:#fff;border:0;border-radius:8px;padding:12px 20px;font-weight:600;cursor:pointer;font-size:0.9rem;}
+    .btn:hover{background:#4f46e5;}
+    .btn-ghost{background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;}
+    .btn-ghost:hover{background:#e2e8f0;}
+    .statusDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b;flex-shrink:0;}
+    .statusDot.ok{background:#22c55e;}
+    .statusDot.bad{background:#ef4444;}
+    .pill{padding:6px 12px;border-radius:6px;background:#f1f5f9;border:1px solid #e2e8f0;color:#64748b;font-size:0.75rem;font-weight:600;}
+    .divider{height:1px;background:#e2e8f0;margin:16px 0;}
+    .mono{font-family:ui-monospace,monospace;}
+    .small{font-size:0.8rem;}
+    .muted{color:#64748b;}
+    .errorBox{display:none;margin-top:12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;color:#b91c1c;}
+    .errorBox .title{font-weight:700;margin-bottom:4px;}
+    .quotes-bar{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;padding:12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;}
+    .quote-item{display:flex;align-items:center;gap:8px;}
+    .quote-item .side{font-size:0.7rem;font-weight:700;text-transform:uppercase;}
+    .quote-item.up .side{color:#22c55e;}
+    .quote-item.down .side{color:#ef4444;}
+    .quote-item .bid{color:#22c55e;font-weight:700;}
+    .quote-item .ask{color:#ef4444;font-weight:700;}
+    .holdGrid{display:grid;gap:12px;}
+    @media(min-width:640px){.holdGrid{grid-template-columns:repeat(2,1fr);}}
+    @media(min-width:1200px){.holdGrid{grid-template-columns:repeat(3,1fr);}}
+    .holdCard{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;}
+    .holdCard .wallet{font-weight:700;font-size:0.95rem;margin-bottom:2px;color:#0f172a;}
+    .holdCard .addr{font-size:0.7rem;color:#64748b;font-family:ui-monospace,monospace;}
+    .holdCard .side-block{margin-top:12px;padding:10px;border-radius:8px;}
+    .holdCard .side-block.up{background:#dcfce7;border:1px solid #86efac;}
+    .holdCard .side-block.down{background:#fee2e2;border:1px solid #fca5a5;}
+    .holdCard .side-label{font-size:0.7rem;font-weight:700;text-transform:uppercase;margin-bottom:4px;}
+    .holdCard .side-block.up .side-label{color:#16a34a;}
+    .holdCard .side-block.down .side-label{color:#dc2626;}
+    .holdCard .shares{font-size:1.1rem;font-weight:700;font-family:ui-monospace,monospace;color:#0f172a;}
+    .holdCard .meta{display:flex;justify-content:space-between;margin-top:6px;font-size:0.75rem;}
+    .holdCard .meta .l{color:#64748b;}
+    .holdCard .meta .r{font-weight:600;font-family:ui-monospace,monospace;}
+    .holdCard .spread{font-size:0.7rem;color:#64748b;margin-top:4px;}
+    .empty-state{text-align:center;padding:40px 20px;color:#64748b;font-size:0.9rem;}
+    @media(max-width:767px){.btn,.btn-ghost{padding:14px;min-height:48px;} .input-row{grid-template-columns:1fr;}}
+    .top-bar{display:flex;flex-wrap:wrap;gap:20px;align-items:center;padding:14px 18px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+    .top-bar .item{display:flex;align-items:center;gap:8px;}
+    .top-bar .item .label{font-size:0.7rem;font-weight:700;text-transform:uppercase;color:#64748b;}
+    .top-bar .item.up .label{color:#16a34a;}
+    .top-bar .item.down .label{color:#dc2626;}
+    .top-bar .item .prices{font-weight:700;font-family:ui-monospace,monospace;font-size:1rem;}
+    .top-bar .item.up .prices .bid{color:#16a34a;}
+    .top-bar .item.up .prices .ask{color:#dc2626;}
+    .top-bar .item.down .prices .bid{color:#16a34a;}
+    .top-bar .item.down .prices .ask{color:#dc2626;}
+    .top-bar .time-left{margin-left:auto;font-weight:700;font-family:ui-monospace,monospace;font-size:1rem;color:#0f172a;}
+    .top-bar .time-left.ended{color:#dc2626;}
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>Polymarket Holdings + Quotes</h1>
-    <div class="sub">Polling UI + server-side orderbook WS for best bid/ask. Also shows users’ avg entry prices.</div>
+    <h1>Whale Tracker</h1>
+    <div class="sub">Track Polymarket wallet holdings and live orderbook for binary markets</div>
+
+    <div id="topBar" class="top-bar" style="display:none;">
+      <div class="item up"><span class="label">UP</span><span class="prices"><span class="bid" id="topUpBid">0.000</span> / <span class="ask" id="topUpAsk">0.000</span></span></div>
+      <div class="item down"><span class="label">DOWN</span><span class="prices"><span class="bid" id="topDownBid">0.000</span> / <span class="ask" id="topDownAsk">0.000</span></span></div>
+      <div class="time-left" id="timeLeft">—</div>
+    </div>
 
     <div class="grid">
       <div class="card">
@@ -494,7 +531,7 @@ INDEX_HTML = r"""
             <span class="pill" id="status">idle</span>
           </div>
           <div class="row">
-            <button class="btn2" id="stopBtn">Stop</button>
+            <button class="btn-ghost" id="stopBtn">Stop</button>
             <button class="btn" id="connectBtn">Connect</button>
           </div>
         </div>
@@ -502,17 +539,11 @@ INDEX_HTML = r"""
         <div class="divider"></div>
 
         <label>Usernames</label>
-        <textarea id="handles">@k9Q2mX4L8A7ZP3R,@0x8dxd</textarea>
+        <textarea id="handles" placeholder="@user1, @user2 or polymarket.com/@user"></textarea>
 
-        <div class="row">
-          <div style="flex:1">
-            <label>Max users (N)</label>
-            <input id="maxUsers" type="number" min="1" max="50" value="5" />
-          </div>
-          <div style="flex:1">
-            <label>Poll interval (seconds)</label>
-            <input id="pollS" type="number" min="1" max="15" value="2" />
-          </div>
+        <div class="input-row" style="margin-top:12px;">
+          <div><label>Max users</label><input id="maxUsers" type="number" min="1" max="50" value="5" /></div>
+          <div><label>Poll (sec)</label><input id="pollS" type="number" min="1" max="15" value="2" /></div>
         </div>
 
         <div class="divider"></div>
@@ -521,6 +552,7 @@ INDEX_HTML = r"""
         <input id="marketSlug" placeholder="bitcoin-up-or-down-january-28-4am-et" />
 
         <div class="small muted" id="marketResolved" style="margin-top:8px;"></div>
+        <div id="quotesBar" class="quotes-bar" style="display:none;"></div>
 
         <div class="errorBox" id="errorBox">
           <div style="font-weight:900;">Error</div>
@@ -534,11 +566,10 @@ INDEX_HTML = r"""
       <div class="card">
         <div class="row" style="justify-content: space-between;">
           <div>
-            <div style="font-weight:900; font-size:16px;">Holdings</div>
-            <div class="small muted">Shares + avg entry + market bid/ask.</div>
+            <div class="card-title">Wallet Holdings</div>
           </div>
           <div class="row">
-            <span class="pill" id="countPill">0 users</span>
+            <span class="pill" id="countPill">0 wallets</span>
           </div>
         </div>
 
@@ -579,17 +610,54 @@ INDEX_HTML = r"""
     return Number(x).toFixed(3);
   }
 
+  function formatTimeLeft(endDateStr) {
+    if (!endDateStr) return null;
+    let end;
+    try {
+      end = new Date(endDateStr.replace("Z", "+00:00"));
+    } catch (e) { return null; }
+    const ms = end.getTime() - Date.now();
+    if (ms <= 0) return { text: "Ended", ended: true };
+    const totalMin = ms / 60000;
+    const days = Math.floor(totalMin / 1440);
+    const hours = Math.floor((totalMin % 1440) / 60);
+    const mins = Math.floor(totalMin % 60);
+    let parts = [];
+    if (days > 0) parts.push(days + "d");
+    if (hours > 0) parts.push(hours + "h");
+    parts.push(mins + "m");
+    return { text: parts.join(" "), ended: false };
+  }
+
+  let timeLeftInterval = null;
+  function updateTopBar() {
+    const tb = document.getElementById("topBar");
+    if (!marketInfo) { tb.style.display = "none"; return; }
+    tb.style.display = "flex";
+    document.getElementById("topUpBid").textContent = fmt(quotes.UP?.bid);
+    document.getElementById("topUpAsk").textContent = fmt(quotes.UP?.ask);
+    document.getElementById("topDownBid").textContent = fmt(quotes.DOWN?.bid);
+    document.getElementById("topDownAsk").textContent = fmt(quotes.DOWN?.ask);
+    const tl = formatTimeLeft(marketInfo.endDate);
+    const el = document.getElementById("timeLeft");
+    if (tl) { el.textContent = tl.text; el.classList.toggle("ended", tl.ended); }
+    else el.textContent = "—";
+  }
+
   function renderMarketResolved() {
     const el = document.getElementById("marketResolved");
-    if (!marketInfo || !marketInfo.conditionId) { el.textContent = ""; return; }
-    el.innerHTML = `
-      Tracking: <b>${marketInfo.title}</b><br>
-      <span class="mono muted">conditionId=${marketInfo.conditionId.slice(0,12)}…</span>
-      <div class="small muted" style="margin-top:6px;">
-        <span class="mono">UP bid/ask:</span> <b>${fmt(quotes.UP.bid)}</b> / <b>${fmt(quotes.UP.ask)}</b>
-        &nbsp; • &nbsp;
-        <span class="mono">DOWN bid/ask:</span> <b>${fmt(quotes.DOWN.bid)}</b> / <b>${fmt(quotes.DOWN.ask)}</b>
-      </div>`;
+    const qb = document.getElementById("quotesBar");
+    if (!marketInfo || !marketInfo.conditionId) {
+      el.textContent = "";
+      qb.style.display = "none";
+      return;
+    }
+    el.innerHTML = `Tracking: <b>${marketInfo.title || "(unknown)"}</b>`;
+    qb.style.display = "flex";
+    qb.innerHTML = `
+      <div class="quote-item up"><span class="side">UP</span> <span class="bid">${fmt(quotes.UP.bid)}</span> / <span class="ask">${fmt(quotes.UP.ask)}</span></div>
+      <div class="quote-item down"><span class="side">DOWN</span> <span class="bid">${fmt(quotes.DOWN.bid)}</span> / <span class="ask">${fmt(quotes.DOWN.ask)}</span></div>
+    `;
   }
 
   function renderResolveBox() {
@@ -603,17 +671,12 @@ INDEX_HTML = r"""
   function renderHoldings() {
     const grid = document.getElementById("holdGrid");
     const handles = Object.keys(holdings);
-    document.getElementById("countPill").textContent = `${handles.length} users`;
+    document.getElementById("countPill").textContent = `${handles.length} wallets`;
     grid.innerHTML = "";
 
     if (!handles.length) {
-      grid.innerHTML = `<div class="small muted">No data yet.</div>`;
+      grid.innerHTML = `<div class="empty-state">No wallet data yet.</div>`;
       return;
-    }
-
-    let maxShares = 1.0;
-    for (const h of handles) {
-      maxShares = Math.max(maxShares, holdings[h]?.UP?.shares || 0, holdings[h]?.DOWN?.shares || 0);
     }
 
     for (const h of handles) {
@@ -621,32 +684,24 @@ INDEX_HTML = r"""
       const dnS = holdings[h]?.DOWN?.shares || 0;
       const upAvg = holdings[h]?.UP?.avgPrice || 0;
       const dnAvg = holdings[h]?.DOWN?.avgPrice || 0;
-
-      const upPct = Math.max(0, Math.min(100, (upS / maxShares) * 100));
-      const dnPct = Math.max(0, Math.min(100, (dnS / maxShares) * 100));
+      const walletShort = (resolved[h] || h).slice(0, 10) + "...";
 
       const div = document.createElement("div");
       div.className = "holdCard";
       div.innerHTML = `
-        <div class="row" style="justify-content: space-between;">
-          <div style="font-weight:900;" class="mono">@${h}</div>
-          <div class="pill mono">${(resolved[h] || "").slice(0,10)}…</div>
+        <div class="wallet">@${h}</div>
+        <div class="addr">${walletShort}</div>
+        <div class="side-block up">
+          <div class="side-label">UP</div>
+          <div class="shares">${fmt(upS)} shares</div>
+          <div class="meta"><span class="l">Avg entry</span><span class="r">${fmt(upAvg)}</span></div>
+          <div class="spread">Bid/Ask: ${fmt(quotes.UP.bid)} / ${fmt(quotes.UP.ask)}</div>
         </div>
-
-        <div style="margin-top:10px;">
-          <div class="k">UP</div>
-          <div class="v mono">${fmt(upS)} shares</div>
-          <div class="bar"><div class="fillUp" style="width:${upPct}%"></div></div>
-          <div class="kv"><div class="left">Avg entry</div><div class="right mono">${fmt(upAvg)}</div></div>
-          <div class="kv"><div class="left">Market bid/ask</div><div class="right mono">${fmt(quotes.UP.bid)} / ${fmt(quotes.UP.ask)}</div></div>
-        </div>
-
-        <div style="margin-top:14px;">
-          <div class="k">DOWN</div>
-          <div class="v mono">${fmt(dnS)} shares</div>
-          <div class="bar"><div class="fillDown" style="width:${dnPct}%"></div></div>
-          <div class="kv"><div class="left">Avg entry</div><div class="right mono">${fmt(dnAvg)}</div></div>
-          <div class="kv"><div class="left">Market bid/ask</div><div class="right mono">${fmt(quotes.DOWN.bid)} / ${fmt(quotes.DOWN.ask)}</div></div>
+        <div class="side-block down">
+          <div class="side-label">DOWN</div>
+          <div class="shares">${fmt(dnS)} shares</div>
+          <div class="meta"><span class="l">Avg entry</span><span class="r">${fmt(dnAvg)}</span></div>
+          <div class="spread">Bid/Ask: ${fmt(quotes.DOWN.bid)} / ${fmt(quotes.DOWN.ask)}</div>
         </div>
       `;
       grid.appendChild(div);
@@ -673,7 +728,13 @@ INDEX_HTML = r"""
 
     try {
       const resp = await fetch(`/api/holdings?${params.toString()}`);
-      const data = await resp.json();
+      const rawText = await resp.text();
+      let data;
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch (parseErr) {
+        throw new Error("Invalid JSON response. Server may be down or returned HTML. Raw: " + (rawText || "").slice(0, 80) + "...");
+      }
       if (!resp.ok || data.error) throw new Error(data.error || `HTTP ${resp.status}`);
 
       marketInfo = data.market;
@@ -681,9 +742,14 @@ INDEX_HTML = r"""
       holdings = data.holdings || {};
       quotes = data.quotes || quotes;
 
+      updateTopBar();
       renderMarketResolved();
       renderResolveBox();
       renderHoldings();
+
+      if (!timeLeftInterval) {
+        timeLeftInterval = setInterval(updateTopBar, 1000);
+      }
 
       if (timer) {
         clearInterval(timer);
@@ -691,7 +757,7 @@ INDEX_HTML = r"""
       }
     } catch (e) {
       setStatus("bad", "error");
-      showError(String(e));
+      showError(e instanceof Error ? e.message : String(e));
       stop();
     }
   }
@@ -707,6 +773,10 @@ INDEX_HTML = r"""
     if (timer) {
       clearInterval(timer);
       timer = null;
+    }
+    if (timeLeftInterval) {
+      clearInterval(timeLeftInterval);
+      timeLeftInterval = null;
     }
     setStatus("warn", "stopped");
   }
@@ -790,6 +860,7 @@ async def api_holdings(
         up_q = best.get(up_token, {"bid": 0.0, "ask": 0.0, "ts": 0.0})
         dn_q = best.get(dn_token, {"bid": 0.0, "ask": 0.0, "ts": 0.0})
 
+        end_date = (m.get("endDate") or m.get("end_date") or "").strip()
         return {
             "market": {
                 "slug": slug,
@@ -797,6 +868,7 @@ async def api_holdings(
                 "title": title,
                 "upTokenId": up_token,
                 "downTokenId": dn_token,
+                "endDate": end_date,
             },
             "proxy_wallets": proxy_wallets,
             "holdings": holdings_payload,
