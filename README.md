@@ -44,7 +44,6 @@ This project is for **educational and visualization purposes only**. I do not tr
 
    ```bash
    pip install -r requirements.txt
-   pip install websocket-client
    ```
 
 ## Usage
